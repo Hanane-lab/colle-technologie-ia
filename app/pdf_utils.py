@@ -1,16 +1,12 @@
-import io
+import nltk
+nltk.download("punkt", quiet=True)
+nltk.download("punkt_tab", quiet=True)
+
 import pdfplumber
 import re
-import nltk
-nltk.download('punkt', quiet=True)
-
-
 
 
 def extract_text_from_pdf(file_stream) -> str:
-    """Extrait tout le texte d'un fichier PDF (file_stream: BytesIO ou file-like).
-    Retourne une chaîne de caractères brute (texte concatené page-par-page).
-    """
     text_parts = []
     with pdfplumber.open(file_stream) as pdf:
         for page in pdf.pages:
@@ -20,28 +16,31 @@ def extract_text_from_pdf(file_stream) -> str:
     return "\n".join(text_parts)
 
 
+def clean_text(text: str):
+    # Supprimer les caractères parasites (carrés, �, □, unicode illisibles)
+    text = re.sub(r"[■□�◆◇▶◀▪▫✖✘❌✓✔✚✖️🔸🔹🔺🔻⬜⬛]", " ", text)
 
+    # Supprimer les dates automatiques (ex : 02/10/2025 ou 2/1/24)
+    text = re.sub(r"\b\d{1,2}/\d{1,2}/\d{2,4}\b", " ", text)
 
-def clean_text(text: str) -> str:
-    t = text
-    # Supprime les en-têtes/pieds de page numériques courants (approx.)
-    t = re.sub(r"\n\s*\d+\s*\n", "\n", t)
-    # Remplace plusieurs espaces/newlines par un seul espace
-    t = re.sub(r"\s+", " ", t)
-    t = t.strip()
-    return t
+    # Supprimer les numéros de page (ex : "Page 2", "2/25", "p.3", "3 p")
+    text = re.sub(r"\bpage\s*\d+\b", " ", text, flags=re.IGNORECASE)
+    text = re.sub(r"\b\d+\s*/\s*\d+\b", " ", text)
+    text = re.sub(r"\bp\.\s*\d+\b", " ", text, flags=re.IGNORECASE)
 
+    # Supprimer les %
+    text = text.replace("%", " ")
 
+    # Supprimer les doubles espaces et nettoyer
+    text = re.sub(r"\s+", " ", text)
+    return text.strip()
 
 
 def sentence_chunker(text: str, max_chars: int = 3500):
-    #Découpe le texte en chunks en se basant sur la segmentation en phrases.
-    #max_chars est un proxy pour les tokens (pratique pour BART/T5 avec ~1024 tokens).
-    #Retourne une liste de chunks.
-
     sentences = nltk.sent_tokenize(text)
     chunks = []
     current = ""
+
     for s in sentences:
         if len(current) + len(s) + 1 <= max_chars:
             current = (current + " " + s).strip()
@@ -49,6 +48,8 @@ def sentence_chunker(text: str, max_chars: int = 3500):
             if current:
                 chunks.append(current)
             current = s
+
     if current:
         chunks.append(current)
+
     return chunks
